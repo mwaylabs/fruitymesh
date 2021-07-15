@@ -1,0 +1,94 @@
+= AppUart Module
+
+== Purpose
+
+The _AppUartModule_ executes xref:BasicUsage.adoc[Terminal Commands] received from nodes connected via xref:MeshAccessConnection.adoc[MeshAccessConnection] and sends the output log. It is mainly intended for use in applications where wired input/output such as _UART_ and _SEGGER_ are handled wirelessly. The nodes to be connected to the nodes using this module are mainly assumed to be smart phones.
+
+=== Note on Vendor ID
+
+The AppUartModule uses 0xAAAAA (a company identifier not yet registered with the BLE SIG) to generate a temporary Vendor ID (not yet used). If you are using a duplicate Vendor ID, please change the Vendor ID.
+
+== Sample SmartPhone App
+
+The following are smartphone applications that can use AppUartModule. Please refer to the linked documentation for details.
+
+* https://github.com/nishinohi/FruityMeshAppUart[FruityMeshAppUart]
+
+== Functionality
+
+=== Receive and execute Terminal Commands
+Executes a terminal commands received from a node.
+Since the maximum length of a packet (_MAX_MESH_PACKET_SIZE_) that can be sent at one time is 200 (length of commands that can be received at one time can be much smaller depending on the header), some modules (such as EnrollModule) cannot send the commands they want to send in a single packet. Therefore, _AppUartModule_ deals with this problem by temporarily storing the received commands if necessary, and then concatenating and executing the commands after confirming that all commands have been received.
+
+=== Sending Logs
+If log sending is enabled, the output log will be sent to the connected nodes.
+Note that if the log is output on the packet transmission itself, the log transmission will loop infinitely. (Output log A -> send log A to the node -> output log B accompanying the transmission of log A -> send log B to the node -> ...) _MeshAccessConnection_ logs (logs with the log tag _MACONN_) output logs for the packet transmission itself. Therefore, _AppUartModule_ disables the _MACONN_ log tag when sending logs is enabled.
+If the length of a single log exceeds the maximum packet length, the log is sent using the same mechanism as splitting terminal commands.
+In order to prevent commands that output a large amount of logs from overwhelming communication, the output logs are pushed to a queue once and then popped at regular intervals.
+
+== Usage
+
+Add the AppUartModule in the configuration file of the featuresets you are using, and activate APP_UART.
+
+[source, C++]
+----
+// e.g. github_dev_nrf52.cpp
+size += GS->InitializeModule<AppUartModule>(createModule, RECORD_STORAGE_RECORD_ID_VENDOR_MODULE_CONFIG_BASE + 0);
+
+// e.g. github_dev_nrf52.h
+#define ACTIVATE_APP_UART 1
+----
+
+== Messages
+=== Message Types
+[source, C++]
+----
+enum AppUartModuleTriggerActionMessages {
+    TERMINAL_COMMAND = 0,
+    SEND_LOG = 1,
+};
+
+enum AppUartModuleActionResponseMessages {
+    TERMINAL_RETURN_TYPE = 0,
+    RECEIVE_LOG = 1,
+};
+----
+
+=== Send Terminal Commands
+==== Request
+actionType: `TERMINAL_COMMAND`
+
+[cols="1,2,3"]
+|===
+|Bytes|Type|Description
+|11|xref:Specification.adoc#connPacketModule[ConnPacketModuleVendor]|
+|1 bit|splitHeader|Indicates the split status of the command to be sent using _SPLIT_WRITE_CMD_ and _SPLIT_WRITE_CMD_END_ of _MessageType_
+|1 bit|splitCount|If command splitting is occurring, this indicates the number of messages to be sent.
+|1 bit|partLen|Command length sent
+|186 bit|data|terminal commands
+|===
+
+==== Response
+
+actionType: `TERMINAL_RETURN_TYPE`
+[cols="1,2,3"]
+|===
+|Bytes|Type|Description
+|11|xref:Specification.adoc#connPacketModule[ConnPacketModuleVendor]|
+|1 bit|commandSuccess|command receive result（0: false, 1: success）
+|===
+
+=== Send Log
+==== Response
+actionType: `RECEIVE_LOG`
+
+[cols="1,2,3"]
+|===
+|Bytes|Type|Description
+|11|xref:Specification.adoc#connPacketModule[ConnPacketModuleVendor]|
+|1 bit|splitHeader|Indicates the split status of the log to be sent using _SPLIT_WRITE_CMD_ and _SPLIT_WRITE_CMD_END_ of _MessageType_
+|1 bit|splitCount|If log splitting is occurring, this indicates the number of messages to be sent.
+|1 bit|partLen|Log length sent
+|186 bit|data|Log
+|===
+
