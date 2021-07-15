@@ -51,6 +51,9 @@ static std::mutex terminalMutex;
 #include <unistd.h>
 #endif
 
+#if IS_ACTIVE(APP_UART)
+#include "AppUartModule.h"
+#endif
 
 extern "C"
 {
@@ -267,6 +270,9 @@ void Terminal::PutString(const char* buffer)
 #if IS_ACTIVE(SEGGER_RTT)
     Terminal::SeggerRttPutString(buffer);
 #endif
+#if IS_ACTIVE(APP_UART)
+    Terminal::AppUartPutString(buffer);
+#endif
 #if IS_ACTIVE(STDIO)
     Terminal::StdioPutString(buffer);
 #endif
@@ -350,6 +356,9 @@ void Terminal::CheckAndProcessLine()
 #endif
 #if IS_ACTIVE(SEGGER_RTT)
     SeggerRttCheckAndProcessLine();
+#endif
+#if IS_ACTIVE(APP_UART)
+    AppUartCheckAndProcessLine();
 #endif
 #if IS_ACTIVE(STDIO)
     StdioCheckAndProcessLine();
@@ -755,6 +764,41 @@ void Terminal::SeggerRttPutChar(char character)
     buffer[0] = character;
     SEGGER_RTT_Write(0, (const char*)buffer, 1);
 }
+#endif
+
+//############################ APP UART
+#define ________________APP_UART___________________
+
+#if IS_ACTIVE(APP_UART)
+
+void Terminal::AppUartCheckAndProcessLine()
+{
+    AppUartModule* appUartModule = reinterpret_cast<AppUartModule*>(GS->node.GetModuleById(APP_UART_MODULE_ID));
+    if (!appUartModule->GetLineToReadAvailable())
+        return;
+
+    readBufferOffset = appUartModule->GetReadBufferOffset();
+    CheckedMemcpy(readBuffer, appUartModule->GetReadBuffer(), readBufferOffset);
+    // App Uart readBuffer does not contain \r or \n
+    readBuffer[readBufferOffset] = '\0';
+    lineToReadAvailable = true;
+    ProcessLine(readBuffer);
+    // Reset buffer
+    readBufferOffset = 0;
+    lineToReadAvailable = false;
+}
+
+void Terminal::AppUartPutString(const char* message)
+{
+    if (strlen(message) == 0)
+        return;
+    AppUartModule* appUartModule = (AppUartModule*)(GS->node.GetModuleById(APP_UART_MODULE_ID));
+    // If the sending process itself generates a log, it will send a log of the sending process forever.
+    if (!appUartModule)
+        return;
+    appUartModule->PutAppLogQueue(message, strlen(message));
+}
+
 #endif
 
 
