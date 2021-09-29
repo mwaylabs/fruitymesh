@@ -53,6 +53,8 @@
 // Chipset board ID
 #if defined(NRF52832)
     #define BOARD_TYPE 4
+#elif defined(NRF52833)
+    #define BOARD_TYPE 28
 #elif defined(NRF52840)
     #define BOARD_TYPE 18
 #elif defined(SIM_ENABLED)
